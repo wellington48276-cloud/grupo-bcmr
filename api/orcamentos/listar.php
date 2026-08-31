@@ -1,0 +1,2 @@
+<?php
+require_once '../config/database.php';require_once '../config/auth.php';$u=requireAuth();if(!usuarioTemAcessoEmpresa($conn,$u['id'],2,$u['perfil']))jsonResponse(false,'Sem acesso.',[],403);$q=$conn->query("SELECT o.id,o.codigo,o.status,o.valor_total,o.enviado_em,o.respondido_em,o.criado_em,s.protocolo,s.cliente_nome,s.equipamento FROM orcamentos o JOIN servicos s ON s.id=o.servico_id WHERE o.empresa_id=2 ORDER BY o.id DESC LIMIT 100");jsonResponse(true,'',['orcamentos'=>$q->fetch_all(MYSQLI_ASSOC)]);

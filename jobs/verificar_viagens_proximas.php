@@ -1,0 +1,4 @@
+<?php
+require_once __DIR__.'/_bootstrap.php';
+$r=$conn->query("SELECT id,codigo,origem,destino,TIMESTAMPDIFF(MINUTE,NOW(),data_saida) minutos FROM viagens WHERE empresa_id=3 AND status='AGENDADA' AND data_saida>NOW() AND data_saida<=DATE_ADD(NOW(),INTERVAL 60 MINUTE)");$total=0;
+while($v=$r->fetch_assoc()){$id=(int)$v['id'];$key='VIAGEM_PROXIMA:'.$id;if(($q=$conn->prepare('SELECT id FROM eventos WHERE chave_unica=?'))){$q->bind_param('s',$key);$q->execute();if($q->get_result()->fetch_assoc())continue;}$desc=$v['codigo'].' · '.$v['origem'].' → '.$v['destino'].' · saída em '.$v['minutos'].' min';criarEventoENotificar($conn,3,0,'Viagem próxima',$desc,'ATENCAO','VIAGEM',$id,$key,'TRANSPORTE','VIAGEM_PROXIMA');$total++;}echo json_encode(['status'=>true,'novos_alertas'=>$total],JSON_UNESCAPED_UNICODE);

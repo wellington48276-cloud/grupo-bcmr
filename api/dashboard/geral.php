@@ -1,0 +1,12 @@
+<?php
+require_once '../config/database.php'; require_once '../config/auth.php';
+$u=requireAuth();$today=date('Y-m-d');
+function one(mysqli $c,string $sql,array $params=[],string $types=''): array{$s=$c->prepare($sql);if($params)$s->bind_param($types,...$params);$s->execute();return $s->get_result()->fetch_assoc()?:[];}
+$com=one($conn,"SELECT COUNT(*) vendas,COALESCE(SUM(total),0) faturamento FROM pedidos WHERE empresa_id=1 AND DATE(criado_em)=? AND status IN ('PAGO','PROCESSANDO','FINALIZADO')",[$today],'s');
+$est=one($conn,"SELECT COALESCE(SUM(estoque_atual),0) itens_estoque,SUM(estoque_atual=0) sem_estoque,SUM(estoque_atual>0 AND estoque_atual<=estoque_minimo) estoque_baixo FROM produtos WHERE empresa_id=1 AND ativo=1");
+$man=one($conn,"SELECT SUM(status NOT IN ('FINALIZADO','ENTREGUE','CANCELADO')) abertos,SUM(status IN ('FINALIZADO','ENTREGUE')) finalizados,SUM(status='AGUARDANDO_APROVACAO') orcamentos,SUM(prazo<NOW() AND status NOT IN ('FINALIZADO','ENTREGUE','CANCELADO')) atrasados,COALESCE(SUM(CASE WHEN status IN ('FINALIZADO','ENTREGUE') THEN valor_final ELSE 0 END),0) faturamento FROM servicos WHERE empresa_id=2");
+$tra=one($conn,"SELECT COUNT(*) viagens_hoje,SUM(status='EM_VIAGEM') em_andamento,SUM(status='AGENDADA' AND data_saida>NOW()) proximas,SUM(status='AGENDADA' AND data_saida<NOW()) atrasadas,COALESCE(SUM(CASE WHEN status='FINALIZADA' THEN valor ELSE 0 END),0) faturamento FROM viagens WHERE empresa_id=3 AND DATE(data_saida)=?",[$today],'s');
+$stmt=$conn->prepare('SELECT prioridade,COUNT(*) total FROM notificacoes WHERE usuario_id=? AND lida=0 GROUP BY prioridade');$stmt->bind_param('i',$u['id']);$stmt->execute();$rr=$stmt->get_result();$not=['INFORMATIVO'=>0,'ATENCAO'=>0,'CRITICO'=>0];while($x=$rr->fetch_assoc())$not[$x['prioridade']]=(int)$x['total'];
+$r=$conn->query('SELECT ev.id,ev.empresa_id,e.nome empresa,ev.titulo,ev.descricao,ev.prioridade,ev.entidade_tipo,ev.entidade_id,ev.criado_em FROM eventos ev JOIN empresas e ON e.id=ev.empresa_id ORDER BY ev.criado_em DESC LIMIT 20');$ativ=[];while($x=$r->fetch_assoc())$ativ[]=$x;
+$total=(float)($com['faturamento']??0)+(float)($man['faturamento']??0)+(float)($tra['faturamento']??0);
+jsonResponse(true,'',['grupo'=>['faturamento_total'=>$total,'notificacoes'=>$not],'comercial_marques'=>array_merge(['empresa_id'=>1],$com,$est),'manutencoes_marques'=>array_merge(['empresa_id'=>2],$man),'transportes_bcmr'=>array_merge(['empresa_id'=>3],$tra),'atividades'=>$ativ]);

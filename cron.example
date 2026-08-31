@@ -1,0 +1,6 @@
+# Ajuste /var/www/bcmr para a pasta real do projeto.
+*/5 * * * * cd /var/www/bcmr && php jobs/verificar_alertas.php >> storage/cron-alertas.log 2>&1
+*/2 * * * * cd /var/www/bcmr && php jobs/expirar_reservas.php >> storage/cron-reservas.log 2>&1
+*/5 * * * * cd /var/www/bcmr && php jobs/processar_documentos.php >> storage/cron-documentos.log 2>&1
+*/2 * * * * cd /var/www/bcmr && php jobs/enviar_push.php >> storage/cron-push.log 2>&1
+*/2 * * * * cd /var/www/bcmr && php jobs/sincronizar_google_sheets.php >> storage/cron-sheets.log 2>&1

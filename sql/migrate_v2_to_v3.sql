@@ -1,0 +1,59 @@
+USE bcmr;
+
+-- Execute este arquivo apenas ao atualizar a V2 existente.
+SET @fk := (SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='viagens' AND COLUMN_NAME='motorista_id' AND REFERENCED_TABLE_NAME IS NOT NULL LIMIT 1);
+SET @sql := IF(@fk IS NULL, 'SELECT 1', CONCAT('ALTER TABLE viagens DROP FOREIGN KEY `', @fk, '`'));
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+ALTER TABLE viagens DROP COLUMN IF EXISTS motorista_id;
+ALTER TABLE viagens ADD COLUMN IF NOT EXISTS cliente_nome VARCHAR(180) NULL AFTER codigo;
+ALTER TABLE viagens ADD COLUMN IF NOT EXISTS data_finalizacao DATETIME NULL AFTER data_saida;
+ALTER TABLE viagens ADD COLUMN IF NOT EXISTS tipo VARCHAR(80) NULL AFTER passageiros;
+ALTER TABLE viagens ADD COLUMN IF NOT EXISTS observacao TEXT NULL AFTER tipo;
+
+-- Converte o status antigo para o fluxo simplificado antes de trocar o ENUM.
+UPDATE viagens SET status='AGENDADA' WHERE status='MOTORISTA_DEFINIDO';
+ALTER TABLE viagens MODIFY status ENUM('AGENDADA','A_CAMINHO','EMBARQUE','EM_VIAGEM','FINALIZADA','CANCELADA') NOT NULL DEFAULT 'AGENDADA';
+DROP TABLE IF EXISTS motoristas;
+
+ALTER TABLE servicos ADD COLUMN IF NOT EXISTS cliente_nome VARCHAR(180) NULL AFTER protocolo;
+ALTER TABLE servicos ADD COLUMN IF NOT EXISTS problema TEXT NULL AFTER equipamento;
+ALTER TABLE servicos ADD COLUMN IF NOT EXISTS finalizado_em DATETIME NULL AFTER valor_final;
+
+ALTER TABLE eventos ADD COLUMN IF NOT EXISTS modulo VARCHAR(80) NULL AFTER empresa_id;
+ALTER TABLE eventos ADD COLUMN IF NOT EXISTS tipo VARCHAR(100) NULL AFTER modulo;
+ALTER TABLE eventos ADD COLUMN IF NOT EXISTS chave_unica VARCHAR(190) NULL AFTER entidade_id;
+SET @idx := (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='eventos' AND INDEX_NAME='uq_eventos_chave_unica');
+SET @sql := IF(@idx=0, 'ALTER TABLE eventos ADD UNIQUE KEY uq_eventos_chave_unica(chave_unica)', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+ALTER TABLE notificacoes ADD COLUMN IF NOT EXISTS enviado_push TINYINT(1) NOT NULL DEFAULT 0 AFTER lida;
+
+CREATE TABLE IF NOT EXISTS auditoria (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT UNSIGNED NULL,
+  empresa_id INT UNSIGNED NULL,
+  acao VARCHAR(120) NOT NULL,
+  entidade_tipo VARCHAR(100) NULL,
+  entidade_id BIGINT UNSIGNED NULL,
+  descricao TEXT NULL,
+  ip VARCHAR(45) NULL,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_auditoria_data(criado_em), INDEX idx_auditoria_empresa(empresa_id),
+  FOREIGN KEY(usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY(empresa_id) REFERENCES empresas(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS integracao_sheets (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  empresa_id INT UNSIGNED NULL,
+  tipo VARCHAR(100) NOT NULL,
+  entidade_tipo VARCHAR(100) NULL,
+  entidade_id BIGINT UNSIGNED NULL,
+  status ENUM('PENDENTE','PROCESSANDO','SINCRONIZADO','ERRO') NOT NULL DEFAULT 'PENDENTE',
+  tentativa INT NOT NULL DEFAULT 0,
+  erro TEXT NULL,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  processado_em DATETIME NULL,
+  INDEX idx_sheets_status(status,criado_em),
+  FOREIGN KEY(empresa_id) REFERENCES empresas(id) ON DELETE SET NULL
+);
